@@ -458,7 +458,9 @@ function renderDrivers(){
   empty.style.display = 'none';
   summary.style.display = 'flex';
 
-  grid.innerHTML = drivers.map(driver => {
+  const sortedDrivers = drivers.slice().sort((a,b) => a.name.localeCompare(b.name, 'pt-BR', {sensitivity:'base'}));
+
+  grid.innerHTML = sortedDrivers.map(driver => {
     const { total, critical, prize } = computeTotal(driver);
     const vScore = velScore(driver);
     const mScore = mediaScore(driver);
