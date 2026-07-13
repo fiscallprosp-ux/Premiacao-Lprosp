@@ -591,6 +591,19 @@ function showToast(msg){
 }
 
 // ---------------- RESET / HISTORY ----------------
+// Cole aqui a URL do seu Apps Script (Extensões > Apps Script > Implantar > App da Web), terminando em /exec
+const SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzXaRWU1a-Yxumbebb8cuigGe_gF8_0HcOuqrFsg9EdEFacIYPwMqwLxW4t9xesvidz2Q/exec";
+
+function sendToSheet(label, savedAt, entries){
+  if(SHEET_WEBHOOK_URL.includes('COLE_AQUI')) return;
+  fetch(SHEET_WEBHOOK_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ label, savedAt, entries })
+  }).catch(err => console.warn('Falha ao enviar para a planilha', err));
+}
+
 function resetMonth(){
   if(drivers.length === 0){ showToast('Adicione motoristas antes de fechar o mês.'); return; }
   openModal('Fechar mês', 'Informe o nome do mês que está sendo fechado.', 'Ex: Junho 2026', '', (label) => {
@@ -598,11 +611,9 @@ function resetMonth(){
       const { total, critical, prize } = computeTotal(d);
       return { name: d.name, score: critical ? 0 : total, prize, critical };
     });
-    history.unshift({
-      label: (label||'').trim() || `Mês ${history.length+1}`,
-      savedAt: new Date().toLocaleDateString('pt-BR'),
-      entries
-    });
+    const finalLabel = (label||'').trim() || `Mês ${history.length+1}`;
+    const savedAt = new Date().toLocaleDateString('pt-BR');
+    history.unshift({ label: finalLabel, savedAt, entries });
     drivers.forEach(d => {
       d.velOcc = 0; d.velOver100 = false; d.media = 0;
       allItemKeys().forEach(k => d.occ[k] = 0);
@@ -610,7 +621,8 @@ function resetMonth(){
     });
     renderDrivers();
     renderHistory();
-    showToast(`Mês "${(label||'').trim() || 'sem nome'}" salvo no histórico. Pontuações zeradas para o novo mês.`);
+    sendToSheet(finalLabel, savedAt, entries);
+    showToast(`Mês "${finalLabel}" salvo no histórico e enviado para a planilha. Pontuações zeradas para o novo mês.`);
   });
 }
 
