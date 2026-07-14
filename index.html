@@ -187,6 +187,15 @@
     border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);
   }
 
+  /* logs */
+  .log-empty{color:var(--muted);font-size:13px;padding:30px;text-align:center;border:1px dashed var(--border);border-radius:8px;background:var(--white);}
+  .log-row{
+    background:var(--white);border:1px solid var(--border);border-left:3px solid var(--blue);
+    border-radius:6px;padding:9px 14px;margin-bottom:6px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap;
+  }
+  .log-row .log-ts{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11.5px;white-space:nowrap;}
+  .log-row .log-user{color:var(--blue);font-weight:600;}
+
   /* modal */
   .modal-overlay{
     display:none;position:fixed;inset:0;background:rgba(21,42,102,0.55);z-index:100;
@@ -245,6 +254,7 @@
   <div class="tabs">
     <button class="tab-btn active" id="tabBtnSim" onclick="showTab('sim')">Simulador</button>
     <button class="tab-btn" id="tabBtnHist" onclick="showTab('hist')">Histórico mensal</button>
+    <button class="tab-btn" id="tabBtnLog" onclick="showTab('log')">Logs</button>
   </div>
 
   <div class="tab active" id="tabSim">
@@ -270,6 +280,18 @@
 
   <div class="tab" id="tabHist">
     <div id="histContainer"></div>
+  </div>
+
+  <div class="tab" id="tabLog">
+    <div class="panel" style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <label style="font-size:13px;color:var(--muted);">Seu nome (aparece nos registros):</label>
+        <input type="text" id="userNameInput" placeholder="Ex: Carlos"
+          style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-family:'Inter',sans-serif;font-size:13px;"
+          onchange="currentUser = this.value.trim() || 'Usuário'">
+      </div>
+    </div>
+    <div id="logContainer"></div>
   </div>
 
 </div>
@@ -329,7 +351,9 @@ const CONFIG = {
 
 let drivers = [];
 let history = [];
+let logs = [];
 let idCounter = 1;
+let currentUser = 'Usuário';
 
 function allItemKeys(){
   const keys = [];
@@ -385,9 +409,36 @@ function togglePanel(id){ document.getElementById(id).classList.toggle('open'); 
 function showTab(tab){
   document.getElementById('tabSim').classList.toggle('active', tab==='sim');
   document.getElementById('tabHist').classList.toggle('active', tab==='hist');
+  document.getElementById('tabLog').classList.toggle('active', tab==='log');
   document.getElementById('tabBtnSim').classList.toggle('active', tab==='sim');
   document.getElementById('tabBtnHist').classList.toggle('active', tab==='hist');
+  document.getElementById('tabBtnLog').classList.toggle('active', tab==='log');
   if(tab==='hist') renderHistory();
+  if(tab==='log') renderLogs();
+}
+
+function logChange(text){
+  logs.unshift({ ts: new Date().toLocaleString('pt-BR'), user: currentUser, text });
+  if(logs.length > 300) logs.length = 300;
+  renderLogs();
+  scheduleSave();
+}
+
+function renderLogs(){
+  const el = document.getElementById('logContainer');
+  const userInput = document.getElementById('userNameInput');
+  if(userInput && document.activeElement !== userInput) userInput.value = currentUser === 'Usuário' ? '' : currentUser;
+  if(!el) return;
+  if(logs.length === 0){
+    el.innerHTML = `<div class="log-empty">Nenhuma alteração registrada ainda.</div>`;
+    return;
+  }
+  el.innerHTML = logs.map(l => `
+    <div class="log-row">
+      <span class="log-ts">${l.ts}</span>
+      <span class="log-user">${l.user}</span>
+      <span>${l.text}</span>
+    </div>`).join('');
 }
 
 function renderWeightPanel(){
@@ -420,10 +471,10 @@ function renderWeightPanel(){
   document.getElementById('weightBody').innerHTML = html;
 }
 
-function updateVelBand(i, val){ CONFIG.velocidade.bands[i].loss = parseFloat(val)||0; renderDrivers(); }
-function updateMediaThreshold(i, val){ CONFIG.media.thresholds[i].pts = parseFloat(val)||0; renderDrivers(); }
+function updateVelBand(i, val){ CONFIG.velocidade.bands[i].loss = parseFloat(val)||0; logChange(`Peso alterado: faixa de velocidade ${i+1} agora perde ${val} pts`); renderDrivers(); }
+function updateMediaThreshold(i, val){ CONFIG.media.thresholds[i].pts = parseFloat(val)||0; logChange(`Peso alterado: faixa de média mensal agora vale ${val} pts`); renderDrivers(); }
 function updateItemLoss(key, val){
-  CONFIG.grupos.forEach(g => { const it = g.itens.find(x=>x.key===key); if(it) it.loss = parseFloat(val)||0; });
+  CONFIG.grupos.forEach(g => { const it = g.itens.find(x=>x.key===key); if(it){ it.loss = parseFloat(val)||0; logChange(`Peso alterado: "${it.label}" agora perde ${val} pts`); } });
   renderDrivers();
 }
 
@@ -433,16 +484,39 @@ function addDriver(){
   if(!name) return;
   drivers.push(newDriver(name));
   input.value = '';
+  logChange(`Motorista adicionado: ${name}`);
   renderDrivers();
 }
-function removeDriver(id){ drivers = drivers.filter(d => d.id !== id); renderDrivers(); }
-function renameDriver(id, val){ const d = drivers.find(x=>x.id===id); d.name = val; scheduleSave(); }
+function removeDriver(id){
+  const d = drivers.find(x=>x.id===id);
+  drivers = drivers.filter(d => d.id !== id);
+  if(d) logChange(`Motorista removido: ${d.name}`);
+  renderDrivers();
+}
+function renameDriver(id, val){
+  const d = drivers.find(x=>x.id===id);
+  const old = d.name; d.name = val;
+  logChange(`Motorista renomeado: "${old}" → "${val}"`);
+  scheduleSave();
+}
 
-function updateVelOcc(id, val){ const d = drivers.find(x=>x.id===id); d.velOcc = Math.max(0, parseInt(val)||0); renderDrivers(); }
-function updateVelOver(id, checked){ const d = drivers.find(x=>x.id===id); d.velOver100 = checked; renderDrivers(); }
-function updateMedia(id, val){ const d = drivers.find(x=>x.id===id); d.media = Math.max(0, parseFloat(val)||0); renderDrivers(); }
-function updateOcc(id, key, val){ const d = drivers.find(x=>x.id===id); d.occ[key] = Math.max(0, parseInt(val)||0); renderDrivers(); }
-function updateCrit(id, key, checked){ const d = drivers.find(x=>x.id===id); d.crit[key] = checked; renderDrivers(); }
+function updateVelOcc(id, val){ const d = drivers.find(x=>x.id===id); d.velOcc = Math.max(0, parseInt(val)||0); logChange(`${d.name}: passagens de velocidade alteradas para ${d.velOcc}`); renderDrivers(); }
+function updateVelOver(id, checked){ const d = drivers.find(x=>x.id===id); d.velOver100 = checked; logChange(`${d.name}: "passou de 100 km/h" marcado como ${checked?'SIM':'não'}`); renderDrivers(); }
+function updateMedia(id, val){ const d = drivers.find(x=>x.id===id); d.media = Math.max(0, parseFloat(val)||0); logChange(`${d.name}: média mensal alterada para ${d.media}`); renderDrivers(); }
+function updateOcc(id, key, val){
+  const d = drivers.find(x=>x.id===id);
+  d.occ[key] = Math.max(0, parseInt(val)||0);
+  const label = CONFIG.grupos.flatMap(g=>g.itens).find(it=>it.key===key)?.label || key;
+  logChange(`${d.name}: "${label}" alterado para ${d.occ[key]}`);
+  renderDrivers();
+}
+function updateCrit(id, key, checked){
+  const d = drivers.find(x=>x.id===id);
+  d.crit[key] = checked;
+  const label = CONFIG.critical.find(c=>c.key===key)?.label || key;
+  logChange(`${d.name}: regra crítica "${label}" marcada como ${checked?'SIM':'não'}`);
+  renderDrivers();
+}
 
 function renderDrivers(){
   const grid = document.getElementById('driversGrid');
@@ -622,32 +696,44 @@ function resetMonth(){
     renderDrivers();
     renderHistory();
     sendToSheet(finalLabel, savedAt, entries);
+    logChange(`Mês fechado: "${finalLabel}" (${entries.length} motoristas)`);
     showToast(`Mês "${finalLabel}" salvo no histórico e enviado para a planilha. Pontuações zeradas para o novo mês.`);
   });
 }
 
 function deleteMonth(idx){
-  openModal('Excluir mês', `Excluir "${history[idx].label}" do histórico? Essa ação não pode ser desfeita.`, '', '', () => {
+  const label = history[idx].label;
+  openModal('Excluir mês', `Excluir "${label}" do histórico? Essa ação não pode ser desfeita.`, '', '', () => {
     history.splice(idx,1);
     renderHistory();
+    logChange(`Mês excluído do histórico: "${label}"`);
     showToast('Mês excluído do histórico.');
   });
   document.getElementById('modalInput').style.display = 'none';
 }
 
-function editMonthLabel(idx, val){ history[idx].label = val; scheduleSave(); }
+function editMonthLabel(idx, val){
+  const old = history[idx].label;
+  history[idx].label = val;
+  logChange(`Nome de mês alterado: "${old}" → "${val}"`);
+  scheduleSave();
+}
 function editEntryScore(idx, eIdx, val){
   const e = history[idx].entries[eIdx];
+  const old = e.score;
   e.score = Math.max(0, parseInt(val)||0);
   if(!e.critical) e.prize = e.score;
+  logChange(`Histórico "${history[idx].label}" — ${e.name}: pontuação alterada de ${old} para ${e.score}`);
   scheduleSave();
 }
 function editEntryCritical(idx, eIdx, checked){
   const e = history[idx].entries[eIdx];
   e.critical = checked;
   e.prize = checked ? 0 : e.score;
+  logChange(`Histórico "${history[idx].label}" — ${e.name}: regra crítica marcada como ${checked?'SIM':'não'}`);
   renderHistory();
 }
+
 
 function renderHistory(){
   const el = document.getElementById('histContainer');
@@ -795,6 +881,7 @@ function renderAll(){
   renderWeightPanel();
   renderDrivers();
   renderHistory();
+  renderLogs();
 }
 
 // ---------------- SINCRONIZAÇÃO NA NUVEM (Firebase) ----------------
@@ -833,7 +920,7 @@ function scheduleSave(){
   saveTimer = setTimeout(() => {
     firebase.database().ref('lprosp/state').set({
       config: serializeConfig(),
-      drivers, history, idCounter
+      drivers, history, logs, idCounter
     }).catch(err => console.warn('Falha ao salvar na nuvem', err));
   }, 500);
 }
@@ -849,6 +936,7 @@ try{
         applyConfig(data.config);
         if(Array.isArray(data.drivers)) drivers = data.drivers;
         if(Array.isArray(data.history)) history = data.history;
+        if(Array.isArray(data.logs)) logs = data.logs;
         if(data.idCounter) idCounter = data.idCounter;
       }
       renderAll();
