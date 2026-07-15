@@ -42,6 +42,32 @@
   }
   .hdr-left{display:flex;align-items:center;gap:16px;}
   .hdr-left img{height:56px;width:auto;}
+  .bell-wrap{position:fixed;top:14px;right:16px;z-index:60;}
+  .bell-btn{
+    background:var(--white);border:1px solid var(--border);cursor:pointer;font-size:14px;color:var(--muted);
+    padding:5px 7px;border-radius:50%;position:relative;line-height:1;opacity:0.7;
+    box-shadow:0 1px 4px rgba(0,0,0,0.08);
+  }
+  .bell-btn:hover{color:var(--blue);background:var(--blue-soft);opacity:1;}
+  .bell-dot{
+    position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;
+    background:var(--red);border:2px solid var(--white);display:none;
+  }
+  .bell-dot.show{display:block;}
+  .bell-panel{
+    display:none;position:absolute;top:38px;right:0;width:280px;
+    background:var(--white);border:1px solid var(--border);border-radius:8px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.12);z-index:50;overflow:hidden;
+  }
+  .bell-panel.open{display:block;}
+  .bell-panel-hdr{
+    background:var(--blue-soft);color:var(--blue-dark);padding:8px 14px;
+    font-family:'Oswald',sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;
+  }
+  .bell-item{padding:10px 14px;border-top:1px solid var(--border);}
+  .bell-item .bell-title{font-size:12.5px;font-weight:600;color:var(--text);}
+  .bell-item .bell-date{font-size:10.5px;color:var(--muted);margin-bottom:3px;}
+  .bell-item .bell-desc{font-size:12px;color:var(--muted);margin-top:2px;}
   h1{
     font-family:'Oswald',sans-serif;font-weight:600;font-size:22px;
     letter-spacing:0.4px;margin:0;text-transform:uppercase;color:var(--blue-dark);
@@ -250,6 +276,14 @@
     </div>
     <button class="btn btn-outline" onclick="printCurrentStatus()">🖨️ Imprimir status atual</button>
     <button class="btn btn-red" onclick="resetMonth()">🔄 Resetar mês</button>
+  </div>
+
+  <div class="bell-wrap">
+    <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
+    <div class="bell-panel" id="bellPanel">
+      <div class="bell-panel-hdr">Novidades</div>
+      <div id="bellList"></div>
+    </div>
   </div>
 
   <div class="tabs">
@@ -916,7 +950,48 @@ function renderAll(){
   renderDrivers();
   renderHistory();
   renderLogs();
+  renderBell();
 }
+
+// ---------------- SININHO DE NOVIDADES ----------------
+const UPDATES = [
+  { id: 1, date: '15/07/2026', title: 'Ícone da aba (favicon)', desc: 'A logo da L-PROSP agora aparece no ícone da aba do navegador.' },
+  { id: 2, date: '15/07/2026', title: 'Sistema de logs', desc: 'Nova aba "Logs" mostra todas as alterações feitas no sistema, com data, hora e usuário.' }
+];
+const _bellKey = 'lprosp_lastSeenUpdate';
+
+function renderBell(){
+  let lastSeen = 0;
+  try{ lastSeen = parseInt(localStorage.getItem(_bellKey)) || 0; }catch(e){}
+  const unread = UPDATES.filter(u => u.id > lastSeen).length;
+  const dot = document.getElementById('bellDot');
+  if(dot) dot.classList.toggle('show', unread > 0);
+
+  const list = document.getElementById('bellList');
+  if(list){
+    list.innerHTML = UPDATES.slice().sort((a,b)=>b.id-a.id).map(u => `
+      <div class="bell-item">
+        <div class="bell-date">${u.date}</div>
+        <div class="bell-title">${u.title}</div>
+        <div class="bell-desc">${u.desc}</div>
+      </div>`).join('');
+  }
+}
+
+function toggleBell(){
+  const panel = document.getElementById('bellPanel');
+  const opening = !panel.classList.contains('open');
+  panel.classList.toggle('open', opening);
+  if(opening){
+    const maxId = Math.max(...UPDATES.map(u => u.id));
+    try{ localStorage.setItem(_bellKey, maxId); }catch(e){}
+    document.getElementById('bellDot').classList.remove('show');
+  }
+}
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.bell-wrap');
+  if(wrap && !wrap.contains(e.target)) document.getElementById('bellPanel').classList.remove('open');
+});
 
 // ---------------- SINCRONIZAÇÃO NA NUVEM (Firebase) ----------------
 // 1. Crie um projeto grátis em https://console.firebase.google.com
