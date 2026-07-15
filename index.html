@@ -742,13 +742,29 @@ function renderDrivers(){
   scheduleSave();
 }
 
+function driverAverageScore(driver){
+  const scores = [];
+  history.forEach(month => {
+    const entry = month.entries.find(e => e.name === driver.name);
+    if(entry) scores.push(entry.critical ? 0 : entry.score);
+  });
+  const { total, critical } = computeTotal(driver);
+  scores.push(critical ? 0 : total);
+  const avg = scores.reduce((a,b)=>a+b,0) / scores.length;
+  return { avg: Math.round(avg), monthsCount: scores.length };
+}
+
 function renderPodium(){
   const el = document.getElementById('podiumBar');
   if(!el) return;
   const ranked = drivers
-    .map(d => ({ d, ...computeTotal(d) }))
+    .map(d => {
+      const total = computeTotal(d);
+      const { avg, monthsCount } = driverAverageScore(d);
+      return { d, ...total, avg, monthsCount };
+    })
     .filter(r => !r.critical)
-    .sort((a,b) => b.total - a.total)
+    .sort((a,b) => b.avg - a.avg)
     .slice(0,3);
   if(ranked.length === 0){ el.style.display = 'none'; el.innerHTML=''; return; }
   el.style.display = 'flex';
@@ -757,8 +773,8 @@ function renderPodium(){
     <div class="podium-card">
       <div class="podium-medal">${medals[i]}</div>
       <div class="podium-name">${r.d.name}</div>
-      <div class="podium-score">${r.total} pts</div>
-      <div class="podium-prize">${r.prize>0 ? 'R$ '+r.prize.toLocaleString('pt-BR') : 'Sem prêmio'}</div>
+      <div class="podium-score">${r.avg} pts</div>
+      <div class="podium-prize">Média de ${r.monthsCount} ${r.monthsCount===1?'mês':'meses'}</div>
     </div>`).join('');
 }
 
@@ -1104,7 +1120,8 @@ const UPDATES = [
   { id: 3, date: '15/07/2026', title: 'Mais segurança ao excluir/cadastrar', desc: 'Agora pede confirmação antes de excluir um motorista, e não deixa cadastrar dois motoristas com o mesmo nome.' },
   { id: 4, date: '15/07/2026', title: 'Pódio do mês e status de sincronização', desc: 'Painel com os 3 melhores motoristas do mês em aberto, e um indicador discreto mostrando se os dados estão sincronizados com a nuvem.' },
   { id: 5, date: '15/07/2026', title: 'Mais controle e histórico visual', desc: 'Edição de pesos travada, aviso ao tentar fechar dois meses no mesmo dia, e gráfico da pontuação média mês a mês no Histórico.' },
-  { id: 6, date: '15/07/2026', title: 'Reabrir mês fechado', desc: 'Agora dá pra desfazer um "Resetar mês": botão "Reabrir" no Histórico restaura os dados do mês no simulador.' }
+  { id: 6, date: '15/07/2026', title: 'Reabrir mês fechado', desc: 'Agora dá pra desfazer um "Resetar mês": botão "Reabrir" no Histórico restaura os dados do mês no simulador.' },
+  { id: 7, date: '15/07/2026', title: 'Pódio por média, não por pontos do mês', desc: 'O ranking dos 3 melhores agora considera a média histórica do motorista (todos os meses fechados + mês atual), não só a pontuação do mês em aberto.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
