@@ -42,7 +42,13 @@
   }
   .hdr-left{display:flex;align-items:center;gap:16px;}
   .hdr-left img{height:56px;width:auto;}
-  .bell-wrap{position:fixed;top:14px;right:16px;z-index:60;}
+  .bell-wrap{position:fixed;top:14px;right:16px;z-index:60;display:flex;align-items:center;gap:8px;}
+  .sync-status{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);
+    background:var(--white);border:1px solid var(--border);border-radius:12px;padding:4px 10px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.08);}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+  .sync-dot.online{background:var(--blue);}
+  .sync-dot.offline{background:var(--red);}
   .bell-btn{
     background:var(--white);border:1px solid var(--border);cursor:pointer;font-size:14px;color:var(--muted);
     padding:5px 7px;border-radius:50%;position:relative;line-height:1;opacity:0.7;
@@ -85,6 +91,15 @@
   .tab.active{display:block;}
 
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .podium-bar{display:none;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .podium-card{
+    background:var(--white);border:1px solid var(--border);border-top:3px solid var(--blue);
+    border-radius:8px;padding:12px 18px;text-align:center;min-width:130px;flex:1;
+  }
+  .podium-medal{font-size:22px;}
+  .podium-name{font-family:'Oswald',sans-serif;font-size:13px;color:var(--blue-dark);text-transform:uppercase;margin-top:2px;}
+  .podium-score{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;margin-top:2px;}
+  .podium-prize{font-size:11.5px;color:var(--muted);margin-top:2px;}
   .add-driver{display:flex;gap:10px;flex:1;min-width:260px;}
   .add-driver input{
     flex:1;background:var(--white);border:1px solid var(--border);color:var(--text);
@@ -279,6 +294,10 @@
   </div>
 
   <div class="bell-wrap">
+    <div class="sync-status" id="syncStatus">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncText">Conectando...</span>
+    </div>
     <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
     <div class="bell-panel" id="bellPanel">
       <div class="bell-panel-hdr">Novidades</div>
@@ -307,6 +326,7 @@
       </div>
     </div>
 
+    <div class="podium-bar" id="podiumBar"></div>
     <div class="grid" id="driversGrid"></div>
     <div class="empty" id="emptyMsg">Nenhum motorista ainda. Adicione um nome acima para começar.</div>
 
@@ -709,7 +729,28 @@ function renderDrivers(){
   }).join('');
 
   renderSummary();
+  renderPodium();
   scheduleSave();
+}
+
+function renderPodium(){
+  const el = document.getElementById('podiumBar');
+  if(!el) return;
+  const ranked = drivers
+    .map(d => ({ d, ...computeTotal(d) }))
+    .filter(r => !r.critical)
+    .sort((a,b) => b.total - a.total)
+    .slice(0,3);
+  if(ranked.length === 0){ el.style.display = 'none'; el.innerHTML=''; return; }
+  el.style.display = 'flex';
+  const medals = ['🥇','🥈','🥉'];
+  el.innerHTML = ranked.map((r,i) => `
+    <div class="podium-card">
+      <div class="podium-medal">${medals[i]}</div>
+      <div class="podium-name">${r.d.name}</div>
+      <div class="podium-score">${r.total} pts</div>
+      <div class="podium-prize">${r.prize>0 ? 'R$ '+r.prize.toLocaleString('pt-BR') : 'Sem prêmio'}</div>
+    </div>`).join('');
 }
 
 function renderSummary(){
@@ -977,7 +1018,8 @@ function renderAll(){
 const UPDATES = [
   { id: 1, date: '15/07/2026', title: 'Ícone da aba (favicon)', desc: 'A logo da L-PROSP agora aparece no ícone da aba do navegador.' },
   { id: 2, date: '15/07/2026', title: 'Sistema de logs', desc: 'Nova aba "Logs" mostra todas as alterações feitas no sistema, com data, hora e usuário.' },
-  { id: 3, date: '15/07/2026', title: 'Mais segurança ao excluir/cadastrar', desc: 'Agora pede confirmação antes de excluir um motorista, e não deixa cadastrar dois motoristas com o mesmo nome.' }
+  { id: 3, date: '15/07/2026', title: 'Mais segurança ao excluir/cadastrar', desc: 'Agora pede confirmação antes de excluir um motorista, e não deixa cadastrar dois motoristas com o mesmo nome.' },
+  { id: 4, date: '15/07/2026', title: 'Pódio do mês e status de sincronização', desc: 'Painel com os 3 melhores motoristas do mês em aberto, e um indicador discreto mostrando se os dados estão sincronizados com a nuvem.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
@@ -1028,6 +1070,17 @@ let cloudReady = false;
 let saveTimer = null;
 let applyingRemote = false;
 
+function setSyncStatus(state){
+  const dot = document.getElementById('syncDot');
+  const text = document.getElementById('syncText');
+  if(!dot || !text) return;
+  dot.classList.remove('online','offline');
+  if(state === 'online'){ dot.classList.add('online'); text.textContent = 'Sincronizado'; }
+  else if(state === 'offline'){ dot.classList.add('offline'); text.textContent = 'Sem conexão'; }
+  else if(state === 'local'){ text.textContent = 'Local (sem nuvem)'; }
+  else { text.textContent = 'Conectando...'; }
+}
+
 function serializeConfig(){
   return {
     velBands: CONFIG.velocidade.bands.map(b => b.loss),
@@ -1073,11 +1126,16 @@ try{
       applyingRemote = false;
       cloudReady = true;
     });
+    firebase.database().ref('.info/connected').on('value', snap => {
+      setSyncStatus(snap.val() === true ? 'online' : 'offline');
+    });
   } else {
+    setSyncStatus('local');
     console.warn('Firebase não configurado — rodando apenas localmente neste navegador.');
     renderAll();
   }
 }catch(e){
+  setSyncStatus('offline');
   console.warn('Firebase indisponível, rodando apenas localmente.', e);
   renderAll();
 }
