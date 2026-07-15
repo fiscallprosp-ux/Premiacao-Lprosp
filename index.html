@@ -546,10 +546,19 @@ function updateItemLoss(key, val){
   renderDrivers();
 }
 
+function isNameTaken(name, excludeId){
+  const n = name.trim().toLowerCase();
+  return drivers.some(d => d.id !== excludeId && d.name.trim().toLowerCase() === n);
+}
+
 function addDriver(){
   const input = document.getElementById('newName');
   const name = input.value.trim();
   if(!name) return;
+  if(isNameTaken(name)){
+    showToast(`Já existe um motorista chamado "${name}".`);
+    return;
+  }
   drivers.push(newDriver(name));
   input.value = '';
   logChange(`Motorista adicionado: ${name}`);
@@ -557,14 +566,25 @@ function addDriver(){
 }
 function removeDriver(id){
   const d = drivers.find(x=>x.id===id);
-  drivers = drivers.filter(d => d.id !== id);
-  if(d) logChange(`Motorista removido: ${d.name}`);
-  renderDrivers();
+  if(!d) return;
+  openModal('Excluir motorista', `Excluir "${d.name}"? Todos os dados do mês em aberto dele serão perdidos.`, '', '', () => {
+    drivers = drivers.filter(x => x.id !== id);
+    logChange(`Motorista removido: ${d.name}`);
+    renderDrivers();
+  });
+  document.getElementById('modalInput').style.display = 'none';
 }
 function renameDriver(id, val){
   const d = drivers.find(x=>x.id===id);
-  const old = d.name; d.name = val;
-  logChange(`Motorista renomeado: "${old}" → "${val}"`);
+  const newName = val.trim();
+  if(!newName){ renderDrivers(); return; }
+  if(isNameTaken(newName, id)){
+    showToast(`Já existe um motorista chamado "${newName}".`);
+    renderDrivers();
+    return;
+  }
+  const old = d.name; d.name = newName;
+  logChange(`Motorista renomeado: "${old}" → "${newName}"`);
   scheduleSave();
 }
 
@@ -956,7 +976,8 @@ function renderAll(){
 // ---------------- SININHO DE NOVIDADES ----------------
 const UPDATES = [
   { id: 1, date: '15/07/2026', title: 'Ícone da aba (favicon)', desc: 'A logo da L-PROSP agora aparece no ícone da aba do navegador.' },
-  { id: 2, date: '15/07/2026', title: 'Sistema de logs', desc: 'Nova aba "Logs" mostra todas as alterações feitas no sistema, com data, hora e usuário.' }
+  { id: 2, date: '15/07/2026', title: 'Sistema de logs', desc: 'Nova aba "Logs" mostra todas as alterações feitas no sistema, com data, hora e usuário.' },
+  { id: 3, date: '15/07/2026', title: 'Mais segurança ao excluir/cadastrar', desc: 'Agora pede confirmação antes de excluir um motorista, e não deixa cadastrar dois motoristas com o mesmo nome.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
