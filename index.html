@@ -1048,7 +1048,7 @@ function scheduleSave(){
   if(!cloudReady || applyingRemote) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    firebase.database().ref('lprosp/state').set({
+    firebase.database().ref('lprosp/state').update({
       config: serializeConfig(),
       drivers, history, logs, idCounter
     }).catch(err => console.warn('Falha ao salvar na nuvem', err));
