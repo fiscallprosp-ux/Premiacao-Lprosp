@@ -75,15 +75,16 @@
   }
   .bell-dot.show{display:block;}
   .bell-panel{
-    display:none;position:absolute;top:38px;right:0;width:280px;
+    display:none;position:absolute;top:38px;right:0;width:280px;max-height:70vh;
     background:var(--white);border:1px solid var(--border);border-radius:8px;
-    box-shadow:0 6px 20px rgba(0,0,0,0.12);z-index:50;overflow:hidden;
+    box-shadow:0 6px 20px rgba(0,0,0,0.12);z-index:50;flex-direction:column;
   }
-  .bell-panel.open{display:block;}
+  .bell-panel.open{display:flex;}
   .bell-panel-hdr{
-    background:var(--blue-soft);color:var(--blue-dark);padding:8px 14px;
+    background:var(--blue-soft);color:var(--blue-dark);padding:8px 14px;flex-shrink:0;
     font-family:'Oswald',sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;
   }
+  #bellList{overflow-y:auto;}
   .bell-item{padding:10px 14px;border-top:1px solid var(--border);}
   .bell-item .bell-title{font-size:12.5px;font-weight:600;color:var(--text);}
   .bell-item .bell-date{font-size:10.5px;color:var(--muted);margin-bottom:3px;}
