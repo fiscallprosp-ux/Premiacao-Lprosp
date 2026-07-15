@@ -24,6 +24,20 @@
     --text:#1B2340;
     --muted:#6A7290;
   }
+  html[data-theme="dark"]{
+    --red-soft:#3A1E22;
+    --blue-dark:#8FB0E8;
+    --blue-soft:#1B2A4A;
+    --white:#1E2126;
+    --green-soft:#173427;
+    --bg:#14161A;
+    --panel:#1E2126;
+    --border:#33383F;
+    --text:#ECEAE4;
+    --muted:#8B9099;
+  }
+  html[data-theme="dark"] body{background:var(--bg);}
+  html[data-theme="dark"] .hist-month-hdr{background:var(--blue);}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -298,6 +312,7 @@
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncText">Conectando...</span>
     </div>
+    <button class="bell-btn" onclick="toggleTheme()" title="Alternar tema" id="themeBtn">🌙</button>
     <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
     <div class="bell-panel" id="bellPanel">
       <div class="bell-panel-hdr">Novidades</div>
@@ -337,6 +352,13 @@
     <div class="panel" id="chartPanel" style="display:none;">
       <div class="panel-title" style="cursor:default;">Evolução da pontuação média por mês</div>
       <div id="chartArea"></div>
+    </div>
+    <div class="panel" id="driverEvolPanel">
+      <div class="panel-title" style="cursor:default;">Evolução por motorista</div>
+      <select id="driverEvolSelect" onchange="renderDriverEvolChart()"
+        style="margin-bottom:10px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--panel);color:var(--text);">
+      </select>
+      <div id="driverEvolChart"></div>
     </div>
     <div id="histContainer"></div>
   </div>
@@ -930,6 +952,97 @@ function editEntryCritical(idx, eIdx, checked){
 }
 
 
+// ---------------- TEMA (claro/escuro) ----------------
+const _themeKey = 'lprosp_theme';
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('themeBtn');
+  if(btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try{ localStorage.setItem(_themeKey, next); }catch(e){}
+}
+(function initTheme(){
+  let saved = 'light';
+  try{ saved = localStorage.getItem(_themeKey) || 'light'; }catch(e){}
+  applyTheme(saved);
+})();
+
+// ---------------- ATALHOS DE TECLADO ----------------
+document.addEventListener('keydown', (e) => {
+  const overlay = document.getElementById('modalOverlay');
+  if(!overlay || !overlay.classList.contains('open')) return;
+  if(e.key === 'Escape'){ closeModal(); }
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    const btn = document.getElementById('modalConfirmBtn');
+    if(btn) btn.click();
+  }
+});
+
+// ---------------- EVOLUÇÃO POR MOTORISTA ----------------
+function getAllKnownNames(){
+  const names = new Set();
+  history.forEach(m => m.entries.forEach(e => names.add(e.name)));
+  drivers.forEach(d => names.add(d.name));
+  return Array.from(names).sort((a,b) => a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
+}
+
+function renderDriverEvolSelect(){
+  const sel = document.getElementById('driverEvolSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  const names = getAllKnownNames();
+  sel.innerHTML = '<option value="">Selecione um motorista</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+  if(names.includes(prev)) sel.value = prev;
+}
+
+function renderDriverEvolChart(){
+  const sel = document.getElementById('driverEvolSelect');
+  const area = document.getElementById('driverEvolChart');
+  if(!sel || !area) return;
+  const name = sel.value;
+  if(!name){
+    area.innerHTML = `<div style="color:var(--muted);font-size:12.5px;padding:10px 2px;">Selecione um motorista para ver a evolução mês a mês.</div>`;
+    return;
+  }
+  const months = history.slice().reverse();
+  const points = months
+    .map(m => {
+      const e = m.entries.find(x => x.name === name);
+      return e ? { label: m.label, score: e.critical ? 0 : e.score } : null;
+    })
+    .filter(p => p !== null);
+
+  if(points.length === 0){
+    area.innerHTML = `<div style="color:var(--muted);font-size:12.5px;padding:10px 2px;">Sem meses fechados registrados para "${name}" ainda.</div>`;
+    return;
+  }
+
+  const w = 720, h = 180, padL = 10, padR = 10, padT = 16, padB = 30;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+  const barW = Math.max(18, Math.min(60, (chartW / points.length) - 14));
+  const maxVal = 2000;
+
+  let bars = '';
+  points.forEach((p,i) => {
+    const x = padL + i * (chartW / points.length) + ((chartW/points.length) - barW)/2;
+    const barH = Math.max(2, (p.score / maxVal) * chartH);
+    const y = padT + chartH - barH;
+    const label = p.label.length > 10 ? p.label.slice(0,9)+'…' : p.label;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW}" height="${barH.toFixed(1)}" rx="3" fill="#1F3E8C"/>`;
+    bars += `<text x="${(x+barW/2).toFixed(1)}" y="${(y-6).toFixed(1)}" font-size="11" text-anchor="middle" fill="#152A66" font-family="IBM Plex Mono, monospace">${p.score}</text>`;
+    bars += `<text x="${(x+barW/2).toFixed(1)}" y="${h-padB+14}" font-size="10" text-anchor="middle" fill="#6A7290">${label}</text>`;
+  });
+  bars += `<line x1="${padL}" y1="${padT+chartH}" x2="${w-padR}" y2="${padT+chartH}" stroke="#D9DEEC" stroke-width="1"/>`;
+
+  area.innerHTML = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;max-height:200px;display:block;">${bars}</svg>`;
+}
+
 function renderChart(){
   const panel = document.getElementById('chartPanel');
   const area = document.getElementById('chartArea');
@@ -964,6 +1077,8 @@ function renderChart(){
 function renderHistory(){
   const el = document.getElementById('histContainer');
   renderChart();
+  renderDriverEvolSelect();
+  renderDriverEvolChart();
   if(history.length === 0){
     el.innerHTML = `<div class="hist-empty">Nenhum mês fechado ainda. Use "Resetar mês" no simulador para salvar a pontuação atual aqui e começar um novo mês.</div>`;
     scheduleSave();
@@ -1121,7 +1236,8 @@ const UPDATES = [
   { id: 4, date: '15/07/2026', title: 'Pódio do mês e status de sincronização', desc: 'Painel com os 3 melhores motoristas do mês em aberto, e um indicador discreto mostrando se os dados estão sincronizados com a nuvem.' },
   { id: 5, date: '15/07/2026', title: 'Mais controle e histórico visual', desc: 'Edição de pesos travada, aviso ao tentar fechar dois meses no mesmo dia, e gráfico da pontuação média mês a mês no Histórico.' },
   { id: 6, date: '15/07/2026', title: 'Reabrir mês fechado', desc: 'Agora dá pra desfazer um "Resetar mês": botão "Reabrir" no Histórico restaura os dados do mês no simulador.' },
-  { id: 7, date: '15/07/2026', title: 'Pódio por média, não por pontos do mês', desc: 'O ranking dos 3 melhores agora considera a média histórica do motorista (todos os meses fechados + mês atual), não só a pontuação do mês em aberto.' }
+  { id: 7, date: '15/07/2026', title: 'Pódio por média, não por pontos do mês', desc: 'O ranking dos 3 melhores agora considera a média histórica do motorista (todos os meses fechados + mês atual), não só a pontuação do mês em aberto.' },
+  { id: 8, date: '15/07/2026', title: 'Modo escuro, evolução por motorista e atalhos', desc: 'Botão 🌙 pra alternar tema, gráfico de evolução individual no Histórico, e Esc/Enter agora funcionam nas caixas de confirmação.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
