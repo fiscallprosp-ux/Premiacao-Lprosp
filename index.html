@@ -341,6 +341,9 @@
         <input type="text" id="newName" placeholder="Nome do motorista (ex: João Silva)">
         <button class="btn btn-blue" onclick="addDriver()">+ Adicionar motorista</button>
       </div>
+      <div class="add-driver" style="max-width:220px;">
+        <input type="text" id="searchDriver" placeholder="🔎 Buscar motorista..." oninput="renderDrivers()">
+      </div>
     </div>
 
     <div class="podium-bar" id="podiumBar"></div>
@@ -676,7 +679,18 @@ function renderDrivers(){
   empty.style.display = 'none';
   summary.style.display = 'flex';
 
-  const sortedDrivers = drivers.slice().sort((a,b) => a.name.localeCompare(b.name, 'pt-BR', {sensitivity:'base'}));
+  const searchTerm = (document.getElementById('searchDriver')?.value || '').trim().toLowerCase();
+  const sortedDrivers = drivers
+    .filter(d => !searchTerm || d.name.toLowerCase().includes(searchTerm))
+    .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR', {sensitivity:'base'}));
+
+  if(searchTerm && sortedDrivers.length === 0){
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1;">Nenhum motorista encontrado para "${searchTerm}".</div>`;
+    renderSummary();
+    renderPodium();
+    scheduleSave();
+    return;
+  }
 
   grid.innerHTML = sortedDrivers.map(driver => {
     const { total, critical, prize } = computeTotal(driver);
@@ -1285,7 +1299,8 @@ const UPDATES = [
   { id: 7, date: '15/07/2026', title: 'Pódio por média, não por pontos do mês', desc: 'O ranking dos 3 melhores agora considera a média histórica do motorista (todos os meses fechados + mês atual), não só a pontuação do mês em aberto.' },
   { id: 8, date: '15/07/2026', title: 'Modo escuro, evolução por motorista e atalhos', desc: 'Botão 🌙 pra alternar tema, gráfico de evolução individual no Histórico, e Esc/Enter agora funcionam nas caixas de confirmação.' },
   { id: 9, date: '15/07/2026', title: 'Correção no painel de novidades', desc: 'O painel do sininho agora tem rolagem própria — atualizações mais antigas não ficam mais escondidas.' },
-  { id: 10, date: '15/07/2026', title: 'Exportar histórico completo e backup', desc: 'Botão "Exportar histórico completo" na aba Histórico baixa todos os meses num CSV só. Botão "Backup completo" no topo baixa tudo (motoristas, histórico, logs, config) num arquivo JSON.' }
+  { id: 10, date: '15/07/2026', title: 'Exportar histórico completo e backup', desc: 'Botão "Exportar histórico completo" na aba Histórico baixa todos os meses num CSV só. Botão "Backup completo" no topo baixa tudo (motoristas, histórico, logs, config) num arquivo JSON.' },
+  { id: 11, date: '15/07/2026', title: 'Busca de motorista', desc: 'Novo campo de busca no Simulador filtra os cards por nome em tempo real.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
