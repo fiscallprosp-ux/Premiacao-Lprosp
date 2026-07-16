@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --red:#C8202F;
@@ -38,6 +39,25 @@
   }
   html[data-theme="dark"] body{background:var(--bg);}
   html[data-theme="dark"] .hist-month-hdr{background:var(--blue);}
+
+  .login-overlay{
+    position:fixed;inset:0;background:var(--bg);z-index:300;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .login-card{
+    background:var(--white);border:1px solid var(--border);border-radius:10px;
+    padding:36px 32px;width:320px;max-width:88vw;text-align:center;
+    border-top:4px solid var(--red);
+  }
+  .login-card img{height:64px;margin-bottom:14px;}
+  .login-card h2{font-family:'Oswald',sans-serif;color:var(--blue-dark);margin:0 0 4px;text-transform:uppercase;font-size:17px;}
+  .login-card p{color:var(--muted);font-size:12px;margin:0 0 18px;}
+  .login-card input{
+    width:100%;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border);
+    border-radius:6px;font-family:'Inter',sans-serif;font-size:14px;background:var(--panel);color:var(--text);
+  }
+  .login-card button{width:100%;margin-top:4px;}
+  .login-error{color:var(--red);font-size:12px;margin-top:10px;min-height:14px;}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -294,6 +314,18 @@
 </style>
 </head>
 <body>
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <img id="loginLogo" alt="L-PROSP">
+    <h2>Acesso Restrito</h2>
+    <p>Entre com o usuário da equipe para continuar.</p>
+    <input type="text" id="loginUser" placeholder="Usuário" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Senha" autocomplete="current-password">
+    <button class="btn btn-blue" onclick="doLogin()">Entrar</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <div class="hdr">
@@ -315,6 +347,7 @@
       <span id="syncText">Conectando...</span>
     </div>
     <button class="bell-btn" onclick="toggleTheme()" title="Alternar tema" id="themeBtn">🌙</button>
+    <button class="bell-btn" onclick="doLogout()" title="Sair">🚪</button>
     <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
     <div class="bell-panel" id="bellPanel">
       <div class="bell-panel-hdr">Novidades</div>
@@ -1300,7 +1333,8 @@ const UPDATES = [
   { id: 8, date: '15/07/2026', title: 'Modo escuro, evolução por motorista e atalhos', desc: 'Botão 🌙 pra alternar tema, gráfico de evolução individual no Histórico, e Esc/Enter agora funcionam nas caixas de confirmação.' },
   { id: 9, date: '15/07/2026', title: 'Correção no painel de novidades', desc: 'O painel do sininho agora tem rolagem própria — atualizações mais antigas não ficam mais escondidas.' },
   { id: 10, date: '15/07/2026', title: 'Exportar histórico completo e backup', desc: 'Botão "Exportar histórico completo" na aba Histórico baixa todos os meses num CSV só. Botão "Backup completo" no topo baixa tudo (motoristas, histórico, logs, config) num arquivo JSON.' },
-  { id: 11, date: '15/07/2026', title: 'Busca de motorista', desc: 'Novo campo de busca no Simulador filtra os cards por nome em tempo real.' }
+  { id: 11, date: '15/07/2026', title: 'Busca de motorista', desc: 'Novo campo de busca no Simulador filtra os cards por nome em tempo real.' },
+  { id: 12, date: '15/07/2026', title: 'Tela de login', desc: 'O sistema agora pede usuário e senha antes de mostrar qualquer coisa. Botão 🚪 no topo permite sair.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
@@ -1389,33 +1423,74 @@ function scheduleSave(){
   }, 500);
 }
 
+const AUTH_EMAIL_SUFFIX = '@lprosp.app'; // domínio fictício, só pra Firebase Auth aceitar o formato de e-mail
+let authInitDone = false;
+
+function doLogout(){
+  if(typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length){ return; }
+  firebase.auth().signOut();
+}
+
+function doLogin(){
+  const user = document.getElementById('loginUser').value.trim().toLowerCase();
+  const pass = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!user || !pass){ errEl.textContent = 'Preencha usuário e senha.'; return; }
+  firebase.auth().signInWithEmailAndPassword(user + AUTH_EMAIL_SUFFIX, pass)
+    .catch(() => { errEl.textContent = 'Usuário ou senha incorretos.'; });
+}
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'Enter') return;
+  const active = document.activeElement;
+  if(active && (active.id === 'loginUser' || active.id === 'loginPass')) doLogin();
+});
+
+function startRealtimeSync(){
+  const ref = firebase.database().ref('lprosp/state');
+  ref.on('value', snap => {
+    const data = snap.val();
+    applyingRemote = true;
+    if(data){
+      applyConfig(data.config);
+      if(Array.isArray(data.drivers)) drivers = data.drivers;
+      if(Array.isArray(data.history)) history = data.history;
+      if(Array.isArray(data.logs)) logs = data.logs;
+      if(data.idCounter) idCounter = data.idCounter;
+    }
+    renderAll();
+    applyingRemote = false;
+    cloudReady = true;
+  });
+  firebase.database().ref('.info/connected').on('value', snap => {
+    setSyncStatus(snap.val() === true ? 'online' : 'offline');
+  });
+}
+
 try{
   if(firebaseConfig.apiKey !== "SEU_API_KEY_AQUI"){
     firebase.initializeApp(firebaseConfig);
-    const ref = firebase.database().ref('lprosp/state');
-    ref.on('value', snap => {
-      const data = snap.val();
-      applyingRemote = true;
-      if(data){
-        applyConfig(data.config);
-        if(Array.isArray(data.drivers)) drivers = data.drivers;
-        if(Array.isArray(data.history)) history = data.history;
-        if(Array.isArray(data.logs)) logs = data.logs;
-        if(data.idCounter) idCounter = data.idCounter;
+    const headerLogo = document.querySelector('.hdr-left img');
+    const loginLogo = document.getElementById('loginLogo');
+    if(headerLogo && loginLogo) loginLogo.src = headerLogo.src;
+
+    firebase.auth().onAuthStateChanged(user => {
+      const overlay = document.getElementById('loginOverlay');
+      if(user){
+        if(overlay) overlay.style.display = 'none';
+        if(!authInitDone){ authInitDone = true; startRealtimeSync(); }
+      } else {
+        if(overlay) overlay.style.display = 'flex';
       }
-      renderAll();
-      applyingRemote = false;
-      cloudReady = true;
-    });
-    firebase.database().ref('.info/connected').on('value', snap => {
-      setSyncStatus(snap.val() === true ? 'online' : 'offline');
     });
   } else {
+    document.getElementById('loginOverlay').style.display = 'none';
     setSyncStatus('local');
     console.warn('Firebase não configurado — rodando apenas localmente neste navegador.');
     renderAll();
   }
 }catch(e){
+  document.getElementById('loginOverlay').style.display = 'none';
   setSyncStatus('offline');
   console.warn('Firebase indisponível, rodando apenas localmente.', e);
   renderAll();
