@@ -306,6 +306,7 @@
     </div>
     <button class="btn btn-outline" onclick="printCurrentStatus()">🖨️ Imprimir status atual</button>
     <button class="btn btn-red" onclick="resetMonth()">🔄 Resetar mês</button>
+    <button class="btn btn-outline" onclick="exportFullBackupJSON()">💾 Backup completo</button>
   </div>
 
   <div class="bell-wrap">
@@ -350,6 +351,9 @@
   </div>
 
   <div class="tab" id="tabHist">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn btn-outline" onclick="exportFullHistoryCSV()">⬇️ Exportar histórico completo (CSV)</button>
+    </div>
     <div class="panel" id="chartPanel" style="display:none;">
       <div class="panel-title" style="cursor:default;">Evolução da pontuação média por mês</div>
       <div id="chartArea"></div>
@@ -1180,6 +1184,47 @@ function printHistoryDriverReport(idx, eIdx){
   window.print();
 }
 
+function exportFullHistoryCSV(){
+  if(history.length === 0){ showToast('Nenhum mês fechado ainda para exportar.'); return; }
+  let csv = 'Mes;Data de fechamento;Motorista;Pontuacao;Premio (R$);Regra critica\n';
+  history.slice().reverse().forEach(month => {
+    month.entries.forEach(e => {
+      csv += `${month.label};${month.savedAt};${e.name};${e.critical ? 0 : e.score};${e.prize};${e.critical ? 'Sim' : 'Nao'}\n`;
+    });
+  });
+  const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `historico_completo_lprosp.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  logChange(`Histórico completo exportado em CSV (${history.length} meses)`);
+  showToast('Histórico completo baixado.');
+}
+
+function exportFullBackupJSON(){
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    exportedBy: currentUser,
+    config: serializeConfig(),
+    drivers, history, logs, idCounter
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup_lprosp_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  logChange('Backup completo do sistema exportado (JSON)');
+  showToast('Backup completo baixado.');
+}
+
 function printCurrentStatus(){
   if(drivers.length === 0){ showToast('Nenhum motorista cadastrado.'); return; }
   const rows = drivers.map(d => {
@@ -1239,7 +1284,8 @@ const UPDATES = [
   { id: 6, date: '15/07/2026', title: 'Reabrir mês fechado', desc: 'Agora dá pra desfazer um "Resetar mês": botão "Reabrir" no Histórico restaura os dados do mês no simulador.' },
   { id: 7, date: '15/07/2026', title: 'Pódio por média, não por pontos do mês', desc: 'O ranking dos 3 melhores agora considera a média histórica do motorista (todos os meses fechados + mês atual), não só a pontuação do mês em aberto.' },
   { id: 8, date: '15/07/2026', title: 'Modo escuro, evolução por motorista e atalhos', desc: 'Botão 🌙 pra alternar tema, gráfico de evolução individual no Histórico, e Esc/Enter agora funcionam nas caixas de confirmação.' },
-  { id: 9, date: '15/07/2026', title: 'Correção no painel de novidades', desc: 'O painel do sininho agora tem rolagem própria — atualizações mais antigas não ficam mais escondidas.' }
+  { id: 9, date: '15/07/2026', title: 'Correção no painel de novidades', desc: 'O painel do sininho agora tem rolagem própria — atualizações mais antigas não ficam mais escondidas.' },
+  { id: 10, date: '15/07/2026', title: 'Exportar histórico completo e backup', desc: 'Botão "Exportar histórico completo" na aba Histórico baixa todos os meses num CSV só. Botão "Backup completo" no topo baixa tudo (motoristas, histórico, logs, config) num arquivo JSON.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
