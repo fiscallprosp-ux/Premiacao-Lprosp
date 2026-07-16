@@ -906,6 +906,16 @@ function sendToSheet(label, savedAt, entries){
   }).catch(err => console.warn('Falha ao enviar para a planilha', err));
 }
 
+function deleteFromSheet(label){
+  if(SHEET_WEBHOOK_URL.includes('COLE_AQUI')) return;
+  fetch(SHEET_WEBHOOK_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'delete', label })
+  }).catch(err => console.warn('Falha ao remover da planilha', err));
+}
+
 function resetMonth(){
   if(drivers.length === 0){ showToast('Adicione motoristas antes de fechar o mês.'); return; }
   const todayStr = new Date().toLocaleDateString('pt-BR');
@@ -965,6 +975,7 @@ function reopenMonth(idx){
     logChange(`Mês reaberto: "${month.label}"`);
     renderDrivers();
     renderHistory();
+    deleteFromSheet(month.label);
     showToast(`Mês "${month.label}" reaberto. Os dados voltaram pro simulador.`);
   });
   document.getElementById('modalInput').style.display = 'none';
@@ -972,11 +983,12 @@ function reopenMonth(idx){
 
 function deleteMonth(idx){
   const label = history[idx].label;
-  openModal('Excluir mês', `Excluir "${label}" do histórico? Essa ação não pode ser desfeita.`, '', '', () => {
+  openModal('Excluir mês', `Excluir "${label}" do histórico? Essa ação não pode ser desfeita (inclusive na planilha).`, '', '', () => {
     history.splice(idx,1);
     renderHistory();
     logChange(`Mês excluído do histórico: "${label}"`);
-    showToast('Mês excluído do histórico.');
+    deleteFromSheet(label);
+    showToast('Mês excluído do histórico e da planilha.');
   });
   document.getElementById('modalInput').style.display = 'none';
 }
@@ -1334,7 +1346,9 @@ const UPDATES = [
   { id: 9, date: '15/07/2026', title: 'Correção no painel de novidades', desc: 'O painel do sininho agora tem rolagem própria — atualizações mais antigas não ficam mais escondidas.' },
   { id: 10, date: '15/07/2026', title: 'Exportar histórico completo e backup', desc: 'Botão "Exportar histórico completo" na aba Histórico baixa todos os meses num CSV só. Botão "Backup completo" no topo baixa tudo (motoristas, histórico, logs, config) num arquivo JSON.' },
   { id: 11, date: '15/07/2026', title: 'Busca de motorista', desc: 'Novo campo de busca no Simulador filtra os cards por nome em tempo real.' },
-  { id: 12, date: '15/07/2026', title: 'Tela de login', desc: 'O sistema agora pede usuário e senha antes de mostrar qualquer coisa. Botão 🚪 no topo permite sair.' }
+  { id: 12, date: '15/07/2026', title: 'Tela de login', desc: 'O sistema agora pede usuário e senha antes de mostrar qualquer coisa. Botão 🚪 no topo permite sair.' },
+  { id: 13, date: '16/07/2026', title: 'Planilha sincronizada com reabrir/excluir', desc: 'Agora, ao reabrir ou excluir um mês no Histórico, as linhas correspondentes também são removidas da planilha do Google Sheets automaticamente.' },
+  { id: 14, date: '16/07/2026', title: 'Logout automático por inatividade', desc: 'Depois de 2 horas sem nenhuma interação, o sistema desloga sozinho por segurança.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
@@ -1430,6 +1444,22 @@ function doLogout(){
   if(typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length){ return; }
   firebase.auth().signOut();
 }
+
+// ---------------- LOGOUT AUTOMÁTICO POR INATIVIDADE ----------------
+const INACTIVITY_LIMIT_MS = 2 * 60 * 60 * 1000; // 2 horas
+let inactivityTimer = null;
+function resetInactivityTimer(){
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    if(typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length && firebase.auth().currentUser){
+      firebase.auth().signOut();
+    }
+  }, INACTIVITY_LIMIT_MS);
+}
+['mousemove','keydown','click','touchstart','scroll'].forEach(evt => {
+  document.addEventListener(evt, resetInactivityTimer, { passive: true });
+});
+resetInactivityTimer();
 
 function doLogin(){
   const user = document.getElementById('loginUser').value.trim().toLowerCase();
