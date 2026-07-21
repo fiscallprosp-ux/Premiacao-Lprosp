@@ -76,7 +76,7 @@
   }
   .hdr-left{display:flex;align-items:center;gap:16px;}
   .hdr-left img{height:56px;width:auto;}
-  .bell-wrap{position:fixed;top:14px;right:16px;z-index:60;display:flex;align-items:center;gap:8px;}
+  .bell-wrap{position:relative;display:flex;align-items:center;gap:8px;}
   .sync-status{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);
     background:var(--white);border:1px solid var(--border);border-radius:12px;padding:4px 10px;
     box-shadow:0 1px 4px rgba(0,0,0,0.08);}
@@ -221,8 +221,11 @@
   details.grupo-detail{margin-bottom:6px;}
   details.grupo-detail summary{
     cursor:pointer;font-size:12px;color:var(--text);padding:4px 0;
-    display:flex;justify-content:space-between;
+    display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none;
   }
+  details.grupo-detail summary::-webkit-details-marker{display:none;}
+  .grupo-arrow{color:var(--muted);font-size:10px;transition:transform .15s;flex-shrink:0;}
+  details.grupo-detail[open] .grupo-arrow{transform:rotate(90deg);}
   .grupo-body{padding:4px 0 6px 4px;}
 
   .critical-box{padding:10px 16px;border-top:1px dashed var(--border);background:#FFF8F8;}
@@ -339,19 +342,20 @@
     <button class="btn btn-outline" onclick="printCurrentStatus()">🖨️ Imprimir status atual</button>
     <button class="btn btn-red" onclick="resetMonth()">🔄 Resetar mês</button>
     <button class="btn btn-outline" onclick="exportFullBackupJSON()">💾 Backup completo</button>
-  </div>
 
-  <div class="bell-wrap">
-    <div class="sync-status" id="syncStatus">
-      <span class="sync-dot" id="syncDot"></span>
-      <span id="syncText">Conectando...</span>
-    </div>
-    <button class="bell-btn" onclick="toggleTheme()" title="Alternar tema" id="themeBtn">🌙</button>
-    <button class="bell-btn" onclick="doLogout()" title="Sair">🚪</button>
-    <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
-    <div class="bell-panel" id="bellPanel">
-      <div class="bell-panel-hdr">Novidades</div>
-      <div id="bellList"></div>
+    <div class="bell-wrap">
+      <span style="font-size:10.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;">v1.17</span>
+      <div class="sync-status" id="syncStatus">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncText">Conectando...</span>
+      </div>
+      <button class="bell-btn" onclick="toggleTheme()" title="Alternar tema" id="themeBtn">🌙</button>
+      <button class="bell-btn" onclick="doLogout()" title="Sair">🚪</button>
+      <button class="bell-btn" onclick="toggleBell()" title="Novidades">🔔<span class="bell-dot" id="bellDot"></span></button>
+      <div class="bell-panel" id="bellPanel">
+        <div class="bell-panel-hdr">Novidades</div>
+        <div id="bellList"></div>
+      </div>
     </div>
   </div>
 
@@ -473,6 +477,7 @@ const CONFIG = {
 };
 
 let drivers = [];
+let openGroups = {}; // lembra quais grupos (Documentos, Veículo, etc.) estão abertos em cada card, entre re-renderizações
 let history = [];
 let logs = [];
 let idCounter = 1;
@@ -536,6 +541,10 @@ function grupoScore(driver, grupo){
   return Math.max(0, score);
 }
 
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function computeTotal(driver){
   let total = velScore(driver) + mediaScore(driver);
   CONFIG.grupos.forEach(g => total += grupoScore(driver, g));
@@ -580,8 +589,8 @@ function renderLogs(){
       <span class="log-ts">${l.ts}</span>
       <span class="log-user">${l.user}</span>
       ${_canManage
-        ? `<input type="text" value="${(l.text||'').replace(/"/g,'&quot;')}" onchange="editLogText(${idx}, this.value)" style="flex:1;min-width:160px;font-size:12.5px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;">`
-        : `<span style="flex:1;">${l.text}</span>`}
+        ? `<input type="text" value="${escapeHtml(l.text)}" onchange="editLogText(${idx}, this.value)" style="flex:1;min-width:160px;font-size:12.5px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;">`
+        : `<span style="flex:1;">${escapeHtml(l.text)}</span>`}
       ${_canManage ? `<button class="icon-btn" title="Excluir" onclick="deleteLog(${idx})">✕</button>` : ''}
     </div>`).join('');
 }
@@ -746,9 +755,14 @@ function renderDrivers(){
           <label>${it.label} (-${it.loss})</label>
           <input type="number" min="0" value="${driver.occ[it.key]}" onchange="updateOcc(${driver.id},'${it.key}',this.value)">
         </div>`).join('');
+      const groupKey = `${driver.id}-${g.key}`;
+      const isOpen = openGroups[groupKey] ? 'open' : '';
       return `
-        <details class="grupo-detail">
-          <summary><span>${g.label}</span><span style="color:var(--muted)">${gScore}/${g.max}</span></summary>
+        <details class="grupo-detail" ${isOpen} ontoggle="openGroups['${groupKey}'] = this.open">
+          <summary>
+            <span style="display:flex;gap:8px;align-items:center;"><span>${g.label}</span><span style="color:var(--muted)">${gScore}/${g.max}</span></span>
+            <span class="grupo-arrow">▸</span>
+          </summary>
           <div class="grupo-body">${itensHtml}</div>
         </details>`;
     }).join('');
@@ -756,7 +770,7 @@ function renderDrivers(){
     return `
     <div class="ticket">
       <div class="ticket-hdr">
-        <input class="name" value="${driver.name}" onchange="renameDriver(${driver.id}, this.value)">
+        <input class="name" value="${escapeHtml(driver.name)}" onchange="renameDriver(${driver.id}, this.value)">
         <div class="ticket-actions">
           <button class="icon-btn" title="Imprimir individual" onclick="printDriverReport(${driver.id})">🖨️</button>
           <button class="remove" onclick="removeDriver(${driver.id})">✕</button>
@@ -1151,7 +1165,7 @@ function renderHistory(){
   el.innerHTML = history.map((month, idx) => {
     const rows = month.entries.map((e, eIdx) => `
       <tr>
-        <td>${e.name}</td>
+        <td>${escapeHtml(e.name)}</td>
         <td><input type="number" min="0" value="${e.score}" onchange="editEntryScore(${idx},${eIdx},this.value)"></td>
         <td>
           <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--red);">
@@ -1165,7 +1179,7 @@ function renderHistory(){
     return `
       <div class="hist-month">
         <div class="hist-month-hdr">
-          <input value="${month.label}" onchange="editMonthLabel(${idx},this.value)"
+          <input value="${escapeHtml(month.label)}" onchange="editMonthLabel(${idx},this.value)"
             style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:var(--white);padding:4px 8px;border-radius:4px;font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:13px;flex:1;min-width:140px;">
           <span style="font-size:11px;">Salvo em ${month.savedAt} · Total: R$ ${totalPayout.toLocaleString('pt-BR')}</span>
           <div class="hist-actions">
@@ -1203,7 +1217,7 @@ function printDriverReport(id){
 
   document.getElementById('printArea').innerHTML = `
     <h2>L-PROSP — Justificativa de pontuação</h2>
-    <p>Motorista: <b>${d.name}</b> · Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+    <p>Motorista: <b>${escapeHtml(d.name)}</b> · Gerado em ${new Date().toLocaleString('pt-BR')}</p>
     <table>
       <thead><tr><th>Item</th><th>Ocorrências</th><th>Pontos</th></tr></thead>
       <tbody>
@@ -1229,7 +1243,7 @@ function printHistoryDriverReport(idx, eIdx){
   const e = month.entries[eIdx];
   document.getElementById('printArea').innerHTML = `
     <h2>L-PROSP — Justificativa de pontuação</h2>
-    <p>Motorista: <b>${e.name}</b> · Mês: <b>${month.label}</b> (fechado em ${month.savedAt})</p>
+    <p>Motorista: <b>${escapeHtml(e.name)}</b> · Mês: <b>${escapeHtml(month.label)}</b> (fechado em ${month.savedAt})</p>
     <table>
       <thead><tr><th>Item</th><th>Valor</th></tr></thead>
       <tbody>
@@ -1289,7 +1303,7 @@ function printCurrentStatus(){
   const rows = drivers.map(d => {
     const { total, critical, prize } = computeTotal(d);
     return `<tr>
-      <td>${d.name}</td>
+      <td>${escapeHtml(d.name)}</td>
       <td>${velScore(d)}/500</td>
       <td>${mediaScore(d)}/500</td>
       <td>${CONFIG.grupos.reduce((s,g)=>s+grupoScore(d,g),0)}/1000</td>
@@ -1310,13 +1324,13 @@ function printCurrentStatus(){
 function printMonthReport(idx){
   const month = history[idx];
   const rows = month.entries.map(e => `<tr>
-      <td>${e.name}</td>
+      <td>${escapeHtml(e.name)}</td>
       <td>${e.critical ? 'Regra crítica' : e.score}</td>
       <td>${e.prize>0 ? 'R$ '+e.prize.toLocaleString('pt-BR') : 'Sem prêmio'}</td>
     </tr>`).join('');
   const totalPayout = month.entries.reduce((s,e)=>s+e.prize,0);
   document.getElementById('printArea').innerHTML = `
-    <h2>L-PROSP — Relatório geral: ${month.label}</h2>
+    <h2>L-PROSP — Relatório geral: ${escapeHtml(month.label)}</h2>
     <p>Mês fechado em ${month.savedAt} · Custo total: R$ ${totalPayout.toLocaleString('pt-BR')}</p>
     <table>
       <thead><tr><th>Motorista</th><th>Pontuação</th><th>Prêmio</th></tr></thead>
@@ -1348,7 +1362,10 @@ const UPDATES = [
   { id: 11, date: '15/07/2026', title: 'Busca de motorista', desc: 'Novo campo de busca no Simulador filtra os cards por nome em tempo real.' },
   { id: 12, date: '15/07/2026', title: 'Tela de login', desc: 'O sistema agora pede usuário e senha antes de mostrar qualquer coisa. Botão 🚪 no topo permite sair.' },
   { id: 13, date: '16/07/2026', title: 'Planilha sincronizada com reabrir/excluir', desc: 'Agora, ao reabrir ou excluir um mês no Histórico, as linhas correspondentes também são removidas da planilha do Google Sheets automaticamente.' },
-  { id: 14, date: '16/07/2026', title: 'Logout automático por inatividade', desc: 'Depois de 2 horas sem nenhuma interação, o sistema desloga sozinho por segurança.' }
+  { id: 14, date: '16/07/2026', title: 'Logout automático por inatividade', desc: 'Depois de 2 horas sem nenhuma interação, o sistema desloga sozinho por segurança.' },
+  { id: 15, date: '17/07/2026', title: 'Correção de ícones e de "Outros itens"', desc: 'Os ícones do topo (sincronização, tema, sair, sininho) não sobrepõem mais a barra vermelha do cabeçalho. E o painel "Outros itens" do motorista não fecha mais sozinho ao alterar uma pontuação.' },
+  { id: 16, date: '17/07/2026', title: 'Seta indicando aberto/fechado', desc: 'O painel "Outros itens" agora mostra uma setinha (▸/▾) indicando se está aberto ou fechado.' },
+  { id: 17, date: '17/07/2026', title: 'Correção de segurança em nomes', desc: 'Nomes de motoristas ou de meses com caracteres especiais (aspas, símbolos) não quebram mais a tela nem podem injetar código.' }
 ];
 const _bellKey = 'lprosp_lastSeenUpdate';
 
